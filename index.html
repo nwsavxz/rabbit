@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https://upload.wikimedia.org https://wikimedia.org data:; connect-src https://en.wikipedia.org; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:,">
+<title>Rabbit Hole</title>
+<style>
+  :root { --bg:#fff; --fg:#15171c; --muted:#565e6c; --card:#eef0f5; --accent:#3b45c4; --on-accent:#fff; --line:#d9dce4; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#101115; --fg:#eceef3; --muted:#a8afbd; --card:#1c1e26; --accent:#9aa3ff; --on-accent:#10122b; --line:#2e313c; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--bg); color: var(--fg);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust: 100%; }
+  button, input { font: inherit; color: inherit; }
+  a { color: var(--accent); }
+  .btn { min-height: 44px; padding: 0 20px; border: 0; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-weight: 650; cursor: pointer; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+  header { padding: calc(8px + env(safe-area-inset-top)) 12px 8px; border-bottom: 1px solid var(--line); }
+  form { display: flex; gap: 8px; max-width: 640px; margin: 0 auto; }
+  #q { flex: 1; min-width: 0; min-height: 44px; padding: 0 16px; font-size: 16px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
+
+  #feed { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scroll-snap-type: y mandatory; overscroll-behavior: contain; }
+  .card { height: 100%; max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden; scroll-snap-align: start; scroll-snap-stop: always; }
+  .card[data-i] { cursor: pointer; }
+  #feed, #article { -webkit-tap-highlight-color: transparent; }
+  #article a { -webkit-tap-highlight-color: rgba(120, 130, 255, .25); }
+  .media { flex: 1 1 0; min-height: 0; position: relative; background: var(--card); }
+  .media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  .letter { position: absolute; inset: 0; display: grid; place-items: center; font-size: 96px; font-weight: 800; color: var(--muted); opacity: .45; }
+  .info { flex: 0 0 auto; padding: 12px 18px calc(14px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .tag { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; font-weight: 650; color: var(--accent); }
+  .info h2 { margin: 0; font-size: 24px; line-height: 1.2; overflow-wrap: anywhere; }
+  .info h2, .extract { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+  .info h2 { -webkit-line-clamp: 3; }
+  .extract { margin: 0; -webkit-line-clamp: 6; overflow-wrap: anywhere; }
+  .row { align-self: stretch; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .hint { font-size: 13px; color: var(--muted); }
+  @media (max-height: 640px) { .extract { -webkit-line-clamp: 3; } .info h2 { font-size: 20px; -webkit-line-clamp: 2; } }
+  @media (orientation: landscape) and (max-height: 500px) {
+    .card[data-i] { flex-direction: row; }
+    .card[data-i] .info { flex: 0 0 60%; justify-content: center; }
+  }
+  .message { justify-content: center; justify-content: safe center; align-items: center; text-align: center; padding: 24px; gap: 14px; overflow-y: auto; }
+  .message h2 { margin: 0; font-size: 26px; line-height: 1.2; }
+  .message p { margin: 0; color: var(--muted); max-width: 34ch; }
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .chip { min-height: 44px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); cursor: pointer; }
+  .spinner { width: 34px; height: 34px; border-radius: 50%; border: 4px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(1turn); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+
+  #reader { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; background: var(--bg); }
+  #reader[hidden] { display: none; }
+  .bar { display: flex; justify-content: space-between; align-items: center; padding: calc(8px + env(safe-area-inset-top)) 12px 8px; border-bottom: 1px solid var(--line); }
+  .bar a { min-height: 44px; display: inline-flex; align-items: center; padding: 0 8px; }
+  #scroller { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  #article { max-width: 680px; margin: 0 auto; padding: 8px 18px calc(48px + env(safe-area-inset-bottom)); overflow-wrap: break-word; outline: none; }
+  #article h1 { font-size: 28px; line-height: 1.2; }
+  #article h2 { margin-top: 32px; padding-bottom: 4px; border-bottom: 1px solid var(--line); font-size: 22px; line-height: 1.3; }
+  #article img { max-width: 100%; height: auto; }
+  #article img:not(.math) { background: #fff; }
+  #article img.math { vertical-align: middle; }
+  @media (prefers-color-scheme: dark) { #article img.math { filter: invert(1); } }
+  #article figure { margin: 18px 0; text-align: center; }
+  #article figcaption { font-size: 14px; color: var(--muted); }
+  #article ul.gallery { display: flex; flex-wrap: wrap; gap: 12px; padding: 0; list-style: none; }
+  #article ul.gallery li { max-width: 100%; font-size: 14px; }
+  .table-wrap { max-width: 100%; overflow-x: auto; margin: 16px 0; }
+  #article table { border-collapse: collapse; font-size: 14px; }
+  #article table.wikitable td, #article table.wikitable th { border: 1px solid var(--line); padding: 4px 8px; }
+  #article table.infobox { width: 100%; background: var(--card); border-radius: 10px; }
+  #article table.infobox td, #article table.infobox th { padding: 5px 8px; vertical-align: top; text-align: left; overflow-wrap: anywhere; }
+  #article pre { overflow-x: auto; }
+  .credit { margin-top: 36px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  .status { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <form id="search" role="search">
+    <label class="sr" for="q">Your interests, separated by commas</label>
+    <input id="q" type="search" placeholder="Interests, e.g. jazz, volcanoes" autocomplete="off" enterkeyhint="search" maxlength="300">
+    <button class="btn" type="submit">Go</button>
+  </form>
+</header>
+
+<main id="feed" aria-label="Articles"></main>
+
+<div id="reader" role="dialog" aria-modal="true" aria-label="Article" hidden>
+  <div class="bar">
+    <button id="back" class="btn" type="button">&#8249; Back</button>
+    <a id="external" target="_blank" rel="noopener noreferrer">Open on Wikipedia &#8599;</a>
+  </div>
+  <div id="scroller"><div id="article" tabindex="-1"></div></div>
+</div>
+
+<script>
+'use strict';
+const API = 'https://en.wikipedia.org/w/api.php';
+const MAX_TERMS = 6;          // interests searched at once
+const BATCH = 10;             // results per interest per request
+const MAX_PER_TERM = 100;     // stop before matches stop being close
+const REFILL_AT = 5;          // fetch more when this few cards remain
+const IMAGES_AHEAD = 3;
+const ARTICLES_AHEAD = 2;
+const CACHE_LIMIT = 30;
+const TIMEOUT_MS = 12000;
+const STORE_KEY = 'rabbit-hole-interests';
+
+const $ = (id) => document.getElementById(id);
+const feed = $('feed'), input = $('q'), reader = $('reader'), scroller = $('scroller'), articleEl = $('article');
+
+let S = freshState(0);
+const articleCache = new Map();   // title -> Promise of {title, html}
+const warmed = new Set();         // image URLs already preloaded
+let preloadTimer = 0, preloadRun = 0, readerRun = 0, shown = null, returnFocus = null;
+
+function freshState(gen) {
+  return { gen, terms: [], items: [], seen: new Set(), loading: false, failed: false, active: 0, abort: new AbortController() };
+}
+
+function el(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+}
+
+/* ---------- network ---------- */
+function apiUrl(params) {
+  return API + '?' + new URLSearchParams({ format: 'json', formatversion: '2', origin: '*', ...params });
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function getJSON(url, signal) {
+  for (let attempt = 0; ; attempt++) {
+    if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    const ctrl = new AbortController();
+    const stop = () => ctrl.abort();
+    if (signal) signal.addEventListener('abort', stop, { once: true });
+    const timer = setTimeout(stop, TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      if ((res.status === 429 || res.status === 503) && attempt < 1) {
+        await sleep(1000 * Math.min(Number(res.headers.get('Retry-After')) || 2, 10));
+        continue;
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.info || data.error.code);
+      return data;
+    } finally {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', stop);
+    }
+  }
+}
+
+async function searchTerm(t, signal) {
+  const data = await getJSON(apiUrl({
+    action: 'query', generator: 'search', gsrsearch: t.term, gsrnamespace: '0',
+    gsrlimit: String(BATCH), gsroffset: String(t.offset),
+    prop: 'pageimages|extracts|pageprops|info',
+    piprop: 'thumbnail', pithumbsize: '500', pilimit: 'max',
+    exintro: '1', explaintext: '1', exchars: '600', exlimit: 'max',
+    ppprop: 'disambiguation', inprop: 'url'
+  }), signal);
+  const pages = ((data.query && data.query.pages) || []).slice().sort((a, b) => a.index - b.index);
+  return { pages, next: data.continue && data.continue.gsroffset };
+}
+
+function usable(page, term) {
+  if (page.pageprops && 'disambiguation' in page.pageprops) return false;
+  if (/^(lists?|index|outline) of /i.test(page.title) && !/\blist/i.test(term)) return false;
+  return Boolean(page.extract && page.extract.trim());
+}
+
+function toItem(page, term) {
+  return {
+    title: page.title,
+    extract: page.extract.trim(),
+    image: page.thumbnail ? page.thumbnail.source : '',
+    url: wikiUrl(page.title),
+    term
+  };
+}
+
+const wikiUrl = (title) => 'https://en.wikipedia.org/wiki/' + encodeURIComponent(title.replace(/ /g, '_'));
+
+/* ---------- feed ---------- */
+function parseTerms(text) {
+  const unique = new Map();
+  for (const part of text.split(/[,;\n]+/)) {
+    const term = part.trim().replace(/\s+/g, ' ').slice(0, 100);
+    if (term && !unique.has(term.toLowerCase())) unique.set(term.toLowerCase(), term);
+  }
+  return [...unique.values()];
+}
+
+function startSearch(text) {
+  const all = parseTerms(text);
+  if (!all.length) { input.focus(); return; }
+  const terms = all.slice(0, MAX_TERMS);
+  S.abort.abort();
+  clearTimeout(preloadTimer);
+  preloadRun++;
+  observer.disconnect();
+  S = freshState(S.gen + 1);
+  S.terms = terms.map((term) => ({ term, offset: 0, done: false }));
+  S.skipped = all.length - terms.length;
+  try { localStorage.setItem(STORE_KEY, text); } catch (e) { /* storage unavailable */ }
+  feed.replaceChildren();
+  feed.scrollTop = 0;
+  loadMore();
+}
+
+async function loadMore() {
+  const state = S;
+  if (state.loading || !state.terms.length) return;
+  const active = state.terms.filter((t) => !t.done);
+  if (!active.length) return;
+  state.loading = true;
+  state.failed = false;
+  setTail('loading');
+
+  const results = await Promise.allSettled(active.map((t) => searchTerm(t, state.abort.signal)));
+  if (state !== S) return;               // a newer search replaced this one
+
+  let failures = 0;
+  const lists = results.map((result, k) => {
+    const t = active[k];
+    if (result.status === 'rejected') { failures++; return []; }
+    const { pages, next } = result.value;
+    if (next === undefined || next >= MAX_PER_TERM) t.done = true; else t.offset = next;
+    return pages.filter((p) => usable(p, t.term)).map((p) => ({ id: p.pageid, item: toItem(p, t.term) }));
+  });
+
+  // one from each interest in turn
+  const added = [];
+  for (let row = 0; lists.some((l) => row < l.length); row++) {
+    for (const list of lists) {
+      const entry = list[row];
+      if (entry && !state.seen.has(entry.id)) { state.seen.add(entry.id); added.push(entry.item); }
+    }
+  }
+
+  removeTail();   // removed before appending so scroll snapping does not follow it to the end
+  for (const item of added) {
+    const index = state.items.push(item) - 1;
+    const card = makeCard(item, index);
+    feed.append(card);
+    observer.observe(card);
+  }
+  state.loading = false;
+
+  const finished = state.terms.every((t) => t.done);
+  if (failures === active.length) { state.failed = true; setTail('error'); }
+  else if (finished) setTail(state.items.length ? 'end' : 'empty');
+  else if (!added.length) { loadMore(); return; }
+  else setTail('loading');
+
+  schedulePreload();
+}
+
+function removeTail() {
+  const tail = $('tail');
+  if (tail) { observer.unobserve(tail); tail.remove(); }
+}
+
+function setTail(kind) {
+  removeTail();
+  const tail = el('section', { className: 'card message', id: 'tail' });
+  tail.dataset.kind = kind;
+  tail.setAttribute('role', 'status');
+  if (kind === 'loading') {
+    tail.append(el('div', { className: 'spinner' }), el('p', { textContent: 'Finding articles…' }));
+  } else if (kind === 'error') {
+    const retry = el('button', { className: 'btn', type: 'button', textContent: 'Try again' });
+    retry.addEventListener('click', loadMore);
+    tail.append(el('h2', { textContent: 'Couldn’t reach Wikipedia' }), el('p', { textContent: 'Check your connection, then try again.' }), retry);
+  } else if (kind === 'empty') {
+    tail.append(el('h2', { textContent: 'No articles found' }), el('p', { textContent: 'Check the spelling or try a broader interest.' }));
+  } else {
+    tail.append(el('h2', { textContent: 'That’s the lot' }), el('p', { textContent: 'Add or change your interests above to see more.' }));
+  }
+  feed.append(tail);
+  if (kind === 'loading') observer.observe(tail);
+}
+
+function placeholder(title) {
+  const letter = el('div', { className: 'letter', textContent: Array.from(title)[0] || '?' });
+  letter.setAttribute('aria-hidden', 'true');
+  return letter;
+}
+
+function makeCard(item, index) {
+  const media = el('div', { className: 'media' });
+  if (item.image) {
+    const img = el('img', { alt: '', decoding: 'async', loading: index < 3 ? 'eager' : 'lazy' });
+    img.addEventListener('error', () => img.replaceWith(placeholder(item.title)));
+    img.src = item.image;
+    media.append(img);
+  } else {
+    media.append(placeholder(item.title));
+  }
+  const row = el('div', { className: 'row' }, el('button', { className: 'btn', type: 'button', textContent: 'Read article' }));
+  if (index === 0) {
+    let hint = 'Swipe up for more ↑';
+    if (S.skipped) hint = 'Using your first ' + MAX_TERMS + ' interests';
+    row.append(el('span', { className: 'hint', textContent: hint }));
+  }
+  const info = el('div', { className: 'info' },
+    el('span', { className: 'tag', textContent: item.term }),
+    el('h2', { textContent: item.title }),
+    el('p', { className: 'extract', textContent: item.extract }),
+    row);
+  const card = el('article', { className: 'card' }, media, info);
+  card.dataset.i = index;
+  return card;
+}
+
+const observer = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting || entry.intersectionRatio < 0.6) continue;
+    if (entry.target.id === 'tail') {
+      if (entry.target.dataset.kind === 'loading') loadMore();
+      continue;
+    }
+    S.active = Number(entry.target.dataset.i);
+    schedulePreload();
+    if (!S.failed && S.items.length - S.active <= REFILL_AT) loadMore();
+  }
+}, { root: feed, threshold: 0.6 });
+
+/* ---------- preloading ---------- */
+function schedulePreload() {
+  clearTimeout(preloadTimer);
+  const run = ++preloadRun;
+  // short pause so fast swiping does not request articles that are skipped past
+  preloadTimer = setTimeout(() => preload(run), 250);
+}
+
+async function preload(run) {
+  const { items, active } = S;
+  for (const item of items.slice(active + 1, active + 1 + IMAGES_AHEAD)) {
+    if (item.image && !warmed.has(item.image)) { warmed.add(item.image); new Image().src = item.image; }
+  }
+  if (navigator.connection && navigator.connection.saveData) return;
+  for (const item of items.slice(active, active + 1 + ARTICLES_AHEAD)) {
+    if (run !== preloadRun) return;
+    try { await getArticle(item.title); } catch (e) { /* retried when opened */ }
+  }
+}
+
+function getArticle(title) {
+  let request = articleCache.get(title);
+  if (request) {
+    articleCache.delete(title);
+    articleCache.set(title, request);
+    return request;
+  }
+  request = getJSON(apiUrl({
+    action: 'parse', page: title, prop: 'text', redirects: '1',
+    disableeditsection: '1', disabletoc: '1', disablelimitreport: '1'
+  })).then((data) => ({ title: data.parse.title, html: data.parse.text }));
+  articleCache.set(title, request);
+  request.catch(() => { if (articleCache.get(title) === request) articleCache.delete(title); });
+  while (articleCache.size > CACHE_LIMIT) articleCache.delete(articleCache.keys().next().value);
+  return request;
+}
+
+/* ---------- article cleaning (allow-list: nothing is copied unless listed) ---------- */
+const ALLOWED = new Set(('p h2 h3 h4 h5 h6 ul ol li dl dt dd a b i em strong sup sub br span div figure figcaption img ' +
+  'table tbody thead tfoot tr th td caption blockquote abbr cite code pre small big s u hr q var').split(' '));
+const DROPPED = new Set('script style link meta base iframe frame object embed form input button select textarea video audio noscript template svg canvas map'.split(' '));
+const SKIPPED = '.mw-editsection,.navbox,.navbox-styles,.vertical-navbox,.sidebar,.ambox,.metadata,.noprint,.mw-empty-elt,' +
+  '.sistersitebox,.reference,.reflist,.references,.mw-references-wrap,.portalbox,.shortdescription,.navigation-not-searchable,' +
+  '.mw-cite-backlink,.mw-ext-cite-error,[style*="display:none" i],[style*="display: none" i]';
+const KEPT_CLASSES = ['infobox', 'wikitable', 'gallery'];
+const NON_ARTICLE = /^(file|image|category|help|wikipedia|special|talk|portal|template|user|module|draft|mediawiki|timedtext|[a-z ]+ talk):/i;
+const DEAD_SECTIONS = new Set(['references', 'notes', 'citations', 'footnotes', 'bibliography', 'sources', 'external links', 'further reading']);
+
+function safeDecode(text) { try { return decodeURIComponent(text); } catch (e) { return text; } }
+
+function pruneSections(root) {
+  for (const heading of [...root.querySelectorAll('h2')]) {
+    if (!DEAD_SECTIONS.has(heading.textContent.trim().toLowerCase())) continue;
+    const start = heading.closest('.mw-heading') || heading;
+    while (start.nextElementSibling && !start.nextElementSibling.matches('h2, .mw-heading2') ) start.nextElementSibling.remove();
+    start.remove();
+  }
+}
+
+function cleanLink(source) {
+  let href = (source.getAttribute('href') || '').trim();
+  const link = document.createElement('a');
+  if (href.startsWith('#')) {
+    link.href = '#';
+    link.dataset.anchor = safeDecode(href.slice(1));
+    return link;
+  }
+  if (href.startsWith('./')) href = '/wiki/' + href.slice(2);
+  if (href.startsWith('/wiki/')) {
+    const title = safeDecode(href.slice(6).split('#')[0]).replace(/_/g, ' ');
+    if (!title || NON_ARTICLE.test(title)) return null;
+    link.href = 'https://en.wikipedia.org' + href;
+    link.dataset.title = title;
+    return link;
+  }
+  if (href.startsWith('//')) href = 'https:' + href;
+  if (!/^https:\/\//i.test(href)) return null;
+  link.href = href;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  return link;
+}
+
+function cleanImage(source) {
+  let url;
+  try { url = new URL(source.getAttribute('src') || '', 'https://en.wikipedia.org/'); } catch (e) { return null; }
+  if (url.protocol !== 'https:' || !['upload.wikimedia.org', 'wikimedia.org'].includes(url.hostname)) return null;
+  const img = document.createElement('img');
+  img.loading = 'lazy';                 // must be set before src
+  img.decoding = 'async';
+  img.alt = source.getAttribute('alt') || '';
+  for (const name of ['width', 'height']) {
+    const value = parseInt(source.getAttribute(name), 10);
+    if (value > 0) img.setAttribute(name, value);
+  }
+  if (/math/.test(source.getAttribute('class') || '')) {
+    img.className = 'math';
+    img.removeAttribute('width');
+    img.removeAttribute('height');
+    const style = source.getAttribute('style') || '';
+    for (const prop of ['width', 'height']) {
+      const match = style.match(new RegExp('(?:^|;)\\s*' + prop + ':\\s*([\\d.]+ex)'));
+      if (match) img.style[prop] = match[1];
+    }
+  }
+  img.src = url.href;
+  return img;
+}
+
+const MATH_TAGS = new Set(('math semantics mrow mi mn mo ms mtext mspace msup msub msubsup mfrac msqrt mroot mover munder ' +
+  'munderover mtable mtr mtd mstyle mpadded mphantom mmultiscripts mprescripts none').split(' '));
+const MATH_ATTRS = ['display', 'displaystyle', 'scriptlevel', 'mathvariant', 'stretchy', 'fence', 'separator', 'lspace',
+  'rspace', 'width', 'height', 'depth', 'accent', 'accentunder', 'columnalign'];
+
+function cleanMath(source) {
+  const out = document.createElementNS('http://www.w3.org/1998/Math/MathML', source.localName);
+  for (const name of MATH_ATTRS) if (source.hasAttribute(name)) out.setAttribute(name, source.getAttribute(name));
+  for (const node of source.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) out.append(node.data);
+    else if (node.nodeType === Node.ELEMENT_NODE && MATH_TAGS.has(node.localName)) out.append(cleanMath(node));
+  }
+  return out;
+}
+
+function copyClean(from, to) {
+  for (const node of from.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) { to.append(node.data); continue; }
+    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+    const tag = node.localName;
+    if (DROPPED.has(tag) || node.matches(SKIPPED)) continue;
+    if (tag === 'math') {
+      const box = node.closest('.mwe-math-element');
+      if (!(box && box.querySelector('img'))) to.append(cleanMath(node));
+      continue;
+    }
+    if (!ALLOWED.has(tag)) { copyClean(node, to); continue; }
+
+    if (tag === 'img') { const img = cleanImage(node); if (img) to.append(img); continue; }
+    let out;
+    if (tag === 'a') {
+      out = cleanLink(node);
+      if (!out) { copyClean(node, to); continue; }
+    } else {
+      out = document.createElement(tag);
+    }
+    if (node.id) out.id = 'r-' + node.id;
+    for (const name of KEPT_CLASSES) if (node.classList.contains(name)) out.classList.add(name);
+    if (tag === 'td' || tag === 'th') {
+      for (const name of ['colspan', 'rowspan']) {
+        const value = parseInt(node.getAttribute(name), 10);
+        if (value > 1 && value <= 100) out.setAttribute(name, value);
+      }
+    }
+    copyClean(node, out);
+    to.append(tag === 'table' ? el('div', { className: 'table-wrap' }, out) : out);
+  }
+}
+
+function cleanArticle(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');   // inert: nothing runs or loads
+  pruneSections(doc.body);
+  const fragment = document.createDocumentFragment();
+  copyClean(doc.body, fragment);
+  return fragment;
+}
+
+/* ---------- reader ---------- */
+function openArticle(title, preview) {
+  if (reader.hidden) returnFocus = document.activeElement;
+  else history.replaceState({ title: shown, scroll: scroller.scrollTop }, '');
+  history.pushState({ title, scroll: 0 }, '');
+  showArticle(title, preview, 0);
+}
+
+async function showArticle(title, preview, scroll) {
+  const run = ++readerRun;
+  shown = title;
+  reader.hidden = false;
+  feed.inert = true;
+  document.querySelector('header').inert = true;
+  $('external').href = wikiUrl(title);
+  const status = el('p', { className: 'status', textContent: 'Loading article…' });
+  status.setAttribute('role', 'status');
+  articleEl.replaceChildren(el('h1', { textContent: title }), status);
+  if (preview) articleEl.append(el('p', { textContent: preview }));   // readable straight away
+  scroller.scrollTop = 0;
+  articleEl.focus({ preventScroll: true });
+
+  try {
+    const article = await getArticle(title);
+    if (run !== readerRun) return;
+    const source = el('a', { href: wikiUrl(article.title), target: '_blank', rel: 'noopener noreferrer', textContent: 'the Wikipedia article' });
+    const licence = el('a', { href: 'https://creativecommons.org/licenses/by-sa/4.0/', target: '_blank', rel: 'noopener noreferrer', textContent: 'CC BY-SA 4.0' });
+    const credit = el('p', { className: 'credit' }, 'Adapted from ', source, ' by its contributors, under ', licence,
+      '. References and some boxes are removed here.');
+    articleEl.replaceChildren(el('h1', { textContent: article.title }), cleanArticle(article.html), credit);
+    $('external').href = wikiUrl(article.title);
+    scroller.scrollTop = scroll;
+  } catch (e) {
+    if (run !== readerRun) return;
+    const retry = el('button', { className: 'btn', type: 'button', textContent: 'Try again' });
+    retry.addEventListener('click', () => showArticle(title, preview, scroll));
+    status.textContent = 'This article couldn’t be loaded.';
+    status.after(retry);
+  }
+}
+
+function closeReader() {
+  readerRun++;
+  shown = null;
+  reader.hidden = true;
+  feed.inert = false;
+  document.querySelector('header').inert = false;
+  articleEl.replaceChildren();
+  if (returnFocus && returnFocus.isConnected) returnFocus.focus({ preventScroll: true });
+}
+
+/* ---------- events ---------- */
+$('search').addEventListener('submit', (event) => {
+  event.preventDefault();
+  input.blur();
+  startSearch(input.value);
+});
+
+feed.addEventListener('click', (event) => {
+  const card = event.target.closest('.card[data-i]');
+  if (!card) return;
+  const item = S.items[Number(card.dataset.i)];
+  openArticle(item.title, item.extract);
+});
+
+articleEl.addEventListener('click', (event) => {
+  const link = event.target.closest('a');
+  if (!link) return;
+  if (link.dataset.title) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+    event.preventDefault();
+    openArticle(link.dataset.title);
+  } else if (link.dataset.anchor !== undefined) {
+    event.preventDefault();
+    const target = document.getElementById('r-' + link.dataset.anchor);
+    if (target) target.scrollIntoView();
+  }
+});
+
+$('back').addEventListener('click', () => history.back());
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !reader.hidden) history.back(); });
+window.addEventListener('popstate', (event) => {
+  if (event.state && event.state.title) showArticle(event.state.title, '', event.state.scroll || 0);
+  else closeReader();
+});
+
+/* ---------- start ---------- */
+(function init() {
+  history.scrollRestoration = 'manual';
+  if (history.state) history.replaceState(null, '');
+  const chips = el('div', { className: 'chips' });
+  for (const name of ['Space', 'Ancient Rome', 'Jazz', 'Volcanoes', 'Linguistics']) {
+    const chip = el('button', { className: 'chip', type: 'button', textContent: name });
+    chip.addEventListener('click', () => { input.value = name; startSearch(name); });
+    chips.append(chip);
+  }
+  feed.append(el('section', { className: 'card message' },
+    el('h2', { textContent: 'What are you into?' }),
+    el('p', { textContent: 'Type your interests above, separated by commas, or tap one to start.' }),
+    chips));
+  try { input.value = localStorage.getItem(STORE_KEY) || ''; } catch (e) { /* storage unavailable */ }
+})();
+</script>
+</body>
+</html>
