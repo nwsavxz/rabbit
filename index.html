@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https://upload.wikimedia.org https://wikimedia.org data:; connect-src https://en.wikipedia.org; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https://thumb.wikimedia.org https://upload.wikimedia.org https://wikimedia.org data:; connect-src https://en.wikipedia.org; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:,">
@@ -76,7 +76,20 @@
   #article table { border-collapse: collapse; font-size: 14px; }
   #article table.wikitable td, #article table.wikitable th { border: 1px solid var(--line); padding: 4px 8px; }
   #article table.infobox { width: 100%; background: var(--card); border-radius: 10px; }
-  #article table.infobox td, #article table.infobox th { padding: 5px 8px; vertical-align: top; text-align: left; overflow-wrap: anywhere; }
+  #article table.wikitable img { max-width: none; }
+  /* infobox rows are laid out as a grid, so a long value can never squash the label column */
+  #article table.infobox, #article table.infobox > tbody, #article table.infobox > caption { display: block; }
+  #article table.infobox > caption { padding: 8px; font-weight: 700; }
+  #article table.infobox > tbody > tr { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  #article table.infobox > tbody > tr:has(> th:first-child + td:last-child) { grid-auto-flow: row; grid-template-columns: minmax(0, 40%) minmax(0, 1fr); }
+  #article table.infobox td, #article table.infobox th { min-width: 0; padding: 5px 8px; vertical-align: top; text-align: left; }
+  #article table.infobox > tbody > tr > [colspan]:only-child { text-align: center; }
+  #article table.infobox ul, #article table.infobox ol, #article .plainlist ul, #article .plainlist ol { margin: 0; padding: 0; list-style: none; }
+  #article .hlist ul, #article .hlist ol, #article .hlist li { display: inline; margin: 0; padding: 0; }
+  #article .hlist li:not(:last-child)::after { content: " \00b7  "; }
+  #article .inline { display: inline; }
+  #article .inline-block { display: inline-block; max-width: 100%; vertical-align: top; }
+  #article .hatnote { margin: 8px 0; font-size: 14px; font-style: italic; color: var(--muted); }
   #article pre { overflow-x: auto; }
   .credit { margin-top: 36px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
   .status { color: var(--muted); }
@@ -382,8 +395,12 @@ const ALLOWED = new Set(('p h2 h3 h4 h5 h6 ul ol li dl dt dd a b i em strong sup
 const DROPPED = new Set('script style link meta base iframe frame object embed form input button select textarea video audio noscript template svg canvas map'.split(' '));
 const SKIPPED = '.mw-editsection,.navbox,.navbox-styles,.vertical-navbox,.sidebar,.ambox,.metadata,.noprint,.mw-empty-elt,' +
   '.sistersitebox,.reference,.reflist,.references,.mw-references-wrap,.portalbox,.shortdescription,.navigation-not-searchable,' +
-  '.mw-cite-backlink,.mw-ext-cite-error,[style*="display:none" i],[style*="display: none" i]';
-const KEPT_CLASSES = ['infobox', 'wikitable', 'gallery'];
+  '.mw-cite-backlink,.mw-ext-cite-error,[style*="display:none" i],[style*="display: none" i],' +
+  '[style*="position:absolute" i],[style*="position: absolute" i]';
+const KEPT_CLASSES = ['infobox', 'wikitable', 'gallery', 'plainlist', 'hlist', 'hatnote'];
+const IMAGE_HOSTS = new Set(['thumb.wikimedia.org', 'upload.wikimedia.org', 'wikimedia.org']);
+const EAGER_IMAGES = 3;
+let imageCount = 0;
 const NON_ARTICLE = /^(file|image|category|help|wikipedia|special|talk|portal|template|user|module|draft|mediawiki|timedtext|[a-z ]+ talk):/i;
 const DEAD_SECTIONS = new Set(['references', 'notes', 'citations', 'footnotes', 'bibliography', 'sources', 'external links', 'further reading']);
 
@@ -422,12 +439,17 @@ function cleanLink(source) {
   return link;
 }
 
-function cleanImage(source) {
+function imageURL(source) {
   let url;
   try { url = new URL(source.getAttribute('src') || '', 'https://en.wikipedia.org/'); } catch (e) { return null; }
-  if (url.protocol !== 'https:' || !['upload.wikimedia.org', 'wikimedia.org'].includes(url.hostname)) return null;
+  return url.protocol === 'https:' && IMAGE_HOSTS.has(url.hostname) ? url : null;
+}
+
+function cleanImage(source) {
+  const url = imageURL(source);
+  if (!url) return null;
   const img = document.createElement('img');
-  img.loading = 'lazy';                 // must be set before src
+  img.loading = imageCount++ < EAGER_IMAGES ? 'eager' : 'lazy';   // must be set before src
   img.decoding = 'async';
   img.alt = source.getAttribute('alt') || '';
   for (const name of ['width', 'height']) {
@@ -469,9 +491,13 @@ function copyClean(from, to) {
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
     const tag = node.localName;
     if (DROPPED.has(tag) || node.matches(SKIPPED)) continue;
+    if (node.classList.contains('mwe-math-element')) {
+      const math = node.querySelector('math');
+      const picture = node.querySelector('img');
+      if (math && !(picture && imageURL(picture))) { to.append(cleanMath(math)); continue; }
+    }
     if (tag === 'math') {
-      const box = node.closest('.mwe-math-element');
-      if (!(box && box.querySelector('img'))) to.append(cleanMath(node));
+      if (!node.closest('.mwe-math-element')) to.append(cleanMath(node));
       continue;
     }
     if (!ALLOWED.has(tag)) { copyClean(node, to); continue; }
@@ -486,6 +512,10 @@ function copyClean(from, to) {
     }
     if (node.id) out.id = 'r-' + node.id;
     for (const name of KEPT_CLASSES) if (node.classList.contains(name)) out.classList.add(name);
+    if (tag === 'div' || tag === 'ul' || tag === 'li') {
+      const inline = (node.getAttribute('style') || '').match(/(?:^|;)\s*display\s*:\s*(inline-block|inline)\b/i);
+      if (inline) out.classList.add(inline[1].toLowerCase());
+    }
     if (tag === 'td' || tag === 'th') {
       for (const name of ['colspan', 'rowspan']) {
         const value = parseInt(node.getAttribute(name), 10);
@@ -500,6 +530,7 @@ function copyClean(from, to) {
 function cleanArticle(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');   // inert: nothing runs or loads
   pruneSections(doc.body);
+  imageCount = 0;
   const fragment = document.createDocumentFragment();
   copyClean(doc.body, fragment);
   return fragment;
